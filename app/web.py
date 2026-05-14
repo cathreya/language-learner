@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.templating import Jinja2Templates
 
 from app import cards as cards_module
-from app import db, srs, storage
+from app import db, srs, storage, tts
 from app.config import settings
 from app.models import Capture
 
@@ -135,9 +135,6 @@ async def api_edit_card(
 
     Body: {front?: str, back?: str, lemma?: str, pos?: str}
     """
-    from app import storage
-    from app.tts import synthesize_bytes
-
     card_id = f"{capture_id}:{card_id_suffix}"
     cap = await db.get(capture_id)
     if not cap or not cap.cards:
@@ -164,16 +161,17 @@ async def api_edit_card(
 
     # Regenerate per-vocab audio if the Italian text changed (forward/backward only).
     audio_uri = target.get("audio_uri")
+    audio_changed = False
     if kind in {"forward", "backward"} and new_italian_text:
         old_italian = (target.get("back") if kind == "forward" else target.get("front")) or ""
         if new_italian_text != old_italian:
-            # idx is the trailing number in the card id (e.g. capture_id:fwd:3 → 3)
             parts = card_id.rsplit(":", 1)
             if len(parts) == 2 and parts[1].isdigit():
                 idx = int(parts[1])
                 try:
-                    data = await synthesize_bytes(new_italian_text)
+                    data = await tts.synthesize_bytes(new_italian_text)
                     audio_uri = await storage.upload_vocab_audio(capture_id, idx, data)
+                    audio_changed = True
                 except Exception as e:  # noqa: BLE001
                     raise HTTPException(500, f"tts failed: {e}") from e
 
@@ -189,13 +187,15 @@ async def api_edit_card(
         },
     )
 
-    # Mirror the audio update to the sibling card (forward↔backward share audio at same idx).
-    if kind in {"forward", "backward"} and audio_uri:
-        sibling_kind = "backward" if kind == "forward" else "forward"
+    # Mirror the audio update to the sibling only when audio actually changed —
+    # saves a Firestore write when only English-side text was edited.
+    if audio_changed and audio_uri:
         parts = card_id.rsplit(":", 1)
         if len(parts) == 2 and parts[1].isdigit():
             idx = parts[1]
-            sibling_id = f"{capture_id}:{'bwd' if sibling_kind == 'backward' else 'fwd'}:{idx}"
+            sibling_id = (
+                f"{capture_id}:{'bwd' if kind == 'forward' else 'fwd'}:{idx}"
+            )
             await db.patch_card(capture_id, sibling_id, {"audio_uri": audio_uri})
 
     return JSONResponse({"ok": True})

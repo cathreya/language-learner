@@ -58,6 +58,7 @@ gcloud run deploy "$SERVICE" \
   --timeout=120s \
   --set-env-vars="GCS_BUCKET=${GCS_BUCKET},\
 GCP_PROJECT=${PROJECT_ID},\
+ALLOWED_TELEGRAM_USER_ID=${ALLOWED_TELEGRAM_USER_ID:-},\
 GROQ_STT_MODEL=${GROQ_STT_MODEL:-whisper-large-v3-turbo},\
 MISTRAL_LLM_MODEL=${MISTRAL_LLM_MODEL:-mistral-large-latest},\
 GOOGLE_TTS_VOICE=${GOOGLE_TTS_VOICE:-it-IT-Chirp3-HD-Aoede},\

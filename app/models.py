@@ -33,6 +33,9 @@ class Capture(BaseModel):
 
     telegram_user_id: int | None = None
     telegram_chat_id: int | None = None
+    # Idempotency key for Telegram webhook retries. Stores msg.message_id (chat-
+    # scoped — unique per chat). Field name preserved for backward compat with
+    # already-stored documents; semantically it's a message id, not an update id.
     telegram_update_id: int | None = None
 
     en_audio_path: str | None = None

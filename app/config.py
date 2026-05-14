@@ -1,6 +1,18 @@
 from pathlib import Path
+from typing import Annotated
 
+from pydantic import BeforeValidator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _empty_str_to_none(v):
+    """Treat empty string in env vars as Python `None` for optional integer fields."""
+    if isinstance(v, str) and v.strip() == "":
+        return None
+    return v
+
+
+OptionalInt = Annotated[int | None, BeforeValidator(_empty_str_to_none)]
 
 
 class Settings(BaseSettings):
@@ -10,6 +22,10 @@ class Settings(BaseSettings):
     # Random secret used in the webhook URL path AND as the X-Telegram-Bot-Api-Secret-Token
     # value. Set this to a 32+ char random string before deploying.
     telegram_webhook_secret: str = ""
+    # If set, only this Telegram user id may DM the bot. Anyone else gets ignored.
+    # Get yours by DMing @userinfobot on Telegram once. Leave blank to allow anyone
+    # (only do this for local testing).
+    allowed_telegram_user_id: OptionalInt = None
 
     groq_api_key: str = ""
     groq_stt_model: str = "whisper-large-v3-turbo"

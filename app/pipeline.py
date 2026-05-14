@@ -143,6 +143,29 @@ def _drop_empty_cards(cards: list[dict]) -> list[dict]:
     return [c for c in cards if (c.get("front") or "").strip() and (c.get("back") or "").strip()]
 
 
+def dedupe_cards(
+    cards: list[dict], existing_keys: set[tuple[str, str]]
+) -> tuple[list[dict], set[tuple[str, str]]]:
+    """Drop cards whose (back_lower, pos_lower) already exists in `existing_keys`.
+
+    Also dedupes within the input list (intra-capture dupes). Returns
+    `(filtered_cards, updated_keys)` so callers can chain calls.
+    """
+    keys = set(existing_keys)
+    out: list[dict] = []
+    for c in cards:
+        key = (
+            (c.get("back") or "").strip().lower(),
+            (c.get("pos") or "").strip().lower(),
+        )
+        if key[0] and key in keys:
+            continue
+        if key[0]:
+            keys.add(key)
+        out.append(c)
+    return out, keys
+
+
 def _backfill_trailing_punct(text: str, tokens: list[dict]) -> list[dict]:
     """If `text` ends with .?!… but the last word-token doesn't include it, append it."""
     text = text.rstrip()
@@ -306,15 +329,7 @@ async def stage_translate(capture_id: str) -> None:
     # Dedupe: drop any vocab card whose (back, pos) already exists in another capture.
     # Different conjugations of the same lemma stay separate (only exact-surface matches drop).
     existing_keys = await db.existing_vocab_keys(exclude_capture_id=capture_id)
-    deduped: list[dict] = []
-    for c in cards:
-        key = ((c.get("back") or "").strip().lower(), (c.get("pos") or "").strip().lower())
-        if key[0] and key in existing_keys:
-            continue
-        if key[0]:
-            existing_keys.add(key)  # protect against intra-capture dupes too
-        deduped.append(c)
-    cards = deduped
+    cards, _ = dedupe_cards(cards, existing_keys)
 
     # Fan out vocab into forward/backward FSRS cards + a sentence-level shadowing card.
     # Re-using existing srs state on retry: build by id and preserve the prior srs dict if any.

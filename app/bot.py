@@ -53,8 +53,30 @@ def get_bot() -> Bot:
     )
 
 
+def _is_allowed(msg: Message) -> bool:
+    """Single-user gate. If ALLOWED_TELEGRAM_USER_ID is set, only that user passes.
+
+    Anyone else gets silently dropped — no reply, no DB write, no API call. We
+    don't even acknowledge that the bot exists for unauthorized users.
+    """
+    allowed = settings.allowed_telegram_user_id
+    if allowed is None:
+        return True  # gate disabled
+    return bool(msg.from_user and msg.from_user.id == allowed)
+
+
 def build_dispatcher(bot: Bot) -> Dispatcher:
     dp = Dispatcher()
+
+    # Outer middleware: drop any message from a non-allowed user. Telegram will
+    # see a webhook 200, but no handler runs.
+    @dp.message.outer_middleware()
+    async def gate(handler, event: Message, data):
+        if not _is_allowed(event):
+            uid = event.from_user.id if event.from_user else "?"
+            logger.info("dropping message from unauthorized user_id=%s", uid)
+            return None
+        return await handler(event, data)
 
     @dp.message(CommandStart())
     async def cmd_start(msg: Message) -> None:

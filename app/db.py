@@ -214,19 +214,39 @@ def _is_new_card(srs_state: dict) -> bool:
     return not lr
 
 
-async def due_cards(now: datetime, limit: int = 50) -> list[tuple[str, dict, Capture]]:
-    """Return (capture_id, card_dict, capture) for cards whose srs.due <= now.
+def _was_introduced_today(srs_state: dict, today_utc) -> bool:
+    """Was this card's FIRST review on `today_utc`?
 
-    Applies two caps:
-      - `limit` — max cards in this session (default 50)
-      - `daily_new_card_limit` — max NEW (never-reviewed) cards introduced today,
-        based on UTC date. Reviews of mature cards aren't capped.
-    Sorted: mature (review) cards first, then new ones in stable id order.
+    FSRS doesn't track first_review, so we approximate: a card whose last_review
+    is today AND whose step is small (still in early-learning) was very likely
+    introduced today. Imperfect but bounds the introduction rate.
+    """
+    last_review_iso = srs_state.get("last_review")
+    if not last_review_iso:
+        return False
+    try:
+        lr = datetime.fromisoformat(last_review_iso)
+    except ValueError:
+        return False
+    if lr.tzinfo is None:
+        lr = lr.replace(tzinfo=timezone.utc)
+    return lr.date() == today_utc and (srs_state.get("step") or 0) <= 1
+
+
+def select_due_cards(
+    captures: list[Capture],
+    now: datetime,
+    daily_new_card_limit: int,
+    limit: int = 50,
+) -> list[tuple[str, dict, Capture]]:
+    """Pure function: pick which cards to study now.
+
+    Returns mature (already-reviewed) cards due now, plus up to
+    `daily_new_card_limit` minus the count of new cards introduced today.
+    Capped at `limit`. Mature first, then new in stable id order.
     """
     from app import srs as srs_module
-    from app.config import settings
 
-    captures = await all_ready_visible()
     mature: list[tuple[datetime, str, dict, Capture]] = []
     new: list[tuple[datetime, str, dict, Capture]] = []
     today_utc = now.date()
@@ -236,30 +256,29 @@ async def due_cards(now: datetime, limit: int = 50) -> list[tuple[str, dict, Cap
             srs_state = c.get("srs") or {}
             due = srs_module.parse_due(srs_state)
             if _is_new_card(srs_state):
-                # Has never been reviewed → introduce only up to the daily cap
                 new.append((due, cap.id, c, cap))
-            else:
-                # Count whether this card was last-reviewed today (counts toward
-                # "new today" so that re-runs of fresh cards count against the cap)
-                last_review_iso = srs_state.get("last_review")
-                if last_review_iso:
-                    try:
-                        lr = datetime.fromisoformat(last_review_iso)
-                        if lr.tzinfo is None:
-                            lr = lr.replace(tzinfo=timezone.utc)
-                        if lr.date() == today_utc and (srs_state.get("step") or 0) == 0:
-                            new_introduced_today += 1
-                    except ValueError:
-                        pass
-                if due <= now:
-                    mature.append((due, cap.id, c, cap))
+                continue
+            if _was_introduced_today(srs_state, today_utc):
+                new_introduced_today += 1
+            if due <= now:
+                mature.append((due, cap.id, c, cap))
 
     mature.sort(key=lambda t: t[0])
     new.sort(key=lambda t: (t[1], t[2].get("id", "")))
 
-    remaining_new_quota = max(0, settings.daily_new_card_limit - new_introduced_today)
+    remaining_new_quota = max(0, daily_new_card_limit - new_introduced_today)
     queue = mature + new[:remaining_new_quota]
     return [(cid, card, cap) for _due, cid, card, cap in queue[:limit]]
+
+
+async def due_cards(now: datetime, limit: int = 50) -> list[tuple[str, dict, Capture]]:
+    """Fetch captures from Firestore, then select what's due (pure helper handles the logic)."""
+    from app.config import settings
+
+    captures = await all_ready_visible()
+    return select_due_cards(
+        captures, now, settings.daily_new_card_limit, limit=limit
+    )
 
 
 async def existing_vocab_keys(exclude_capture_id: str | None = None) -> set[tuple[str, str]]:
