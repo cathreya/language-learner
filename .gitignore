@@ -1,0 +1,27 @@
+.env
+.env.*
+!.env.example
+
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+
+data/
+!data/.gitkeep
+
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+.DS_Store
+.idea/
+.vscode/
+
+# google service account jsons if present
+gcp-*.json
+service-account*.json
