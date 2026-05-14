@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Study — {{ due_count }} due</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="study">
+<header class="meta">
+  <a href="/" class="back">←</a>
+  <span class="ts">study</span>
+  <span class="cid"><span id="progress">0</span>/{{ due_count }}</span>
+</header>
+
+<main>
+{% if not queue %}
+  <section class="empty">
+    <h2>Nothing due.</h2>
+    <p>Come back later, or send a new capture.</p>
+  </section>
+{% else %}
+  {% for item in queue %}
+  <section class="study-card hidden"
+           data-idx="{{ loop.index0 }}"
+           data-capture-id="{{ item.capture_id }}"
+           data-card-id="{{ item.card_id }}"
+           data-kind="{{ item.kind }}">
+
+    <div class="kind-badge">
+      {{ item.kind }}{% if item.granularity == "sentence" %} · sentence{% endif %}
+    </div>
+
+    {% if item.kind == "forward" %}
+      {# English → Italian: show English first, reveal Italian #}
+      <div class="study-front">
+        <div class="prompt-en">{{ item.front }}</div>
+        <div class="hint-en">{{ item.en_transcript }}</div>
+      </div>
+      <div class="study-back hidden">
+        <div class="answer-it">{{ item.back }}</div>
+        {% if item.lemma and item.lemma != item.back %}
+          <div class="meta-row"><span class="lemma">{{ item.lemma }}</span>
+            <span class="pos">{{ item.pos }}</span></div>
+        {% endif %}
+        <div class="context-it">
+          {%- for s in item.segments -%}
+            {%- if s.kind == "tok" -%}
+              <span class="tok" data-gloss="{{ s.gloss }}" data-lemma="{{ s.lemma }}" data-pos="{{ s.pos }}">{{ s.text }}</span>
+            {%- elif s.kind == "punct" -%}
+              <span class="punct">{{ s.text }}</span>
+            {%- else -%}{{ s.text }}{%- endif -%}
+          {%- endfor -%}
+        </div>
+        {% if item.audio_url %}
+          <div class="audio-row">
+            <audio controls preload="auto" src="{{ item.audio_url }}"></audio>
+            <div class="rate-row">
+              <button type="button" class="rate" data-rate="0.5">0.5×</button>
+              <button type="button" class="rate" data-rate="0.75">0.75×</button>
+              <button type="button" class="rate rate-default" data-rate="1.0">1×</button>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+
+    {% elif item.kind == "backward" %}
+      {# Italian → English: prompt = Italian word + Italian example sentence (plain, no tap-translate yet) #}
+      <div class="study-front">
+        <div class="prompt-it">{{ item.front }}</div>
+        {% if item.it_text %}
+          <div class="hint-it">{{ item.it_text }}</div>
+        {% endif %}
+        {% if item.audio_url %}
+          <div class="audio-row">
+            <audio controls preload="auto" src="{{ item.audio_url }}"></audio>
+            <div class="rate-row">
+              <button type="button" class="rate" data-rate="0.5">0.5×</button>
+              <button type="button" class="rate" data-rate="0.75">0.75×</button>
+              <button type="button" class="rate rate-default" data-rate="1.0">1×</button>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+      <div class="study-back hidden">
+        <div class="answer-en">{{ item.back }}</div>
+        {% if item.lemma and item.lemma != item.front %}
+          <div class="meta-row"><span class="lemma">{{ item.lemma }}</span>
+            <span class="pos">{{ item.pos }}</span></div>
+        {% endif %}
+        <div class="context-it">
+          {%- for s in item.segments -%}
+            {%- if s.kind == "tok" -%}
+              <span class="tok" data-gloss="{{ s.gloss }}" data-lemma="{{ s.lemma }}" data-pos="{{ s.pos }}">{{ s.text }}</span>
+            {%- elif s.kind == "punct" -%}
+              <span class="punct">{{ s.text }}</span>
+            {%- else -%}{{ s.text }}{%- endif -%}
+          {%- endfor -%}
+        </div>
+        <div class="hint-en">{{ item.en_transcript }}</div>
+      </div>
+
+    {% elif item.kind == "shadowing" %}
+      {# Full sentence: show text + play audio, grade pronunciation/fluency #}
+      <div class="study-front shadowing">
+        <div class="shadow-it">
+          {%- for s in item.segments -%}
+            {%- if s.kind == "tok" -%}
+              <span class="tok" data-gloss="{{ s.gloss }}" data-lemma="{{ s.lemma }}" data-pos="{{ s.pos }}">{{ s.text }}</span>
+            {%- elif s.kind == "punct" -%}
+              <span class="punct">{{ s.text }}</span>
+            {%- else -%}{{ s.text }}{%- endif -%}
+          {%- endfor -%}
+        </div>
+        {% if item.audio_url %}
+          <div class="audio-row">
+            <audio controls preload="auto" src="{{ item.audio_url }}"></audio>
+            <div class="rate-row">
+              <button type="button" class="rate" data-rate="0.5">0.5×</button>
+              <button type="button" class="rate" data-rate="0.75">0.75×</button>
+              <button type="button" class="rate rate-default" data-rate="1.0">1×</button>
+            </div>
+          </div>
+        {% endif %}
+        <div class="hint-en">{{ item.en_transcript }}</div>
+        <p class="shadow-instructions">
+          Listen → say it out loud → listen again. Grade yourself on fluency + pronunciation.
+        </p>
+      </div>
+    {% endif %}
+
+    <div class="card-actions">
+      <button type="button" class="card-edit" title="Edit this card">Edit</button>
+      <button type="button" class="card-delete" title="Remove this card forever">Delete</button>
+    </div>
+
+    <div class="grade-bar">
+      <div class="reveal-row">
+        <button class="reveal" type="button">Reveal</button>
+      </div>
+      <div class="grade-buttons hidden">
+        <button data-rating="again" class="grade again">Again</button>
+        <button data-rating="hard"  class="grade hard">Hard</button>
+        <button data-rating="good"  class="grade good">Good</button>
+        <button data-rating="easy"  class="grade easy">Easy</button>
+      </div>
+    </div>
+  </section>
+  {% endfor %}
+
+  <section class="study-done hidden">
+    <h2>Session complete.</h2>
+    <p>{{ due_count }} card{% if due_count != 1 %}s{% endif %} reviewed.</p>
+    <a class="btn" href="/study">Reload for more</a>
+    <a class="btn ghost" href="/">Home</a>
+  </section>
+{% endif %}
+</main>
+
+<div id="popup" class="popup hidden" role="dialog" aria-hidden="true">
+  <div class="popup-word"></div>
+  <div class="popup-gloss"></div>
+  <div class="popup-meta"><span class="popup-lemma"></span> <span class="popup-pos"></span></div>
+</div>
+
+<script src="/static/review.js"></script>
+<script src="/static/study.js"></script>
+</body>
+</html>

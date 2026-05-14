@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>{{ cap.it_text or cap.en_transcript or "Capture" }} — captured</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="review">
+<header class="meta">
+  <a href="/" class="back">←</a>
+  <span class="ts">{{ cap.created_at.strftime("%b %d, %H:%M") }}</span>
+  <span class="cid">#{{ cap.id[:8] }}</span>
+</header>
+
+<main>
+  {% if cap.status == "ready" %}
+    <section class="it">
+      {%- for s in segments -%}
+        {%- if s.kind == "tok" -%}
+          <span class="tok" data-gloss="{{ s.gloss }}" data-lemma="{{ s.lemma }}" data-pos="{{ s.pos }}">{{ s.text }}</span>
+        {%- elif s.kind == "punct" -%}
+          <span class="punct">{{ s.text }}</span>
+        {%- else -%}
+          {{ s.text }}
+        {%- endif -%}
+      {%- endfor -%}
+    </section>
+
+    <section class="player">
+      <audio controls preload="auto" src="/audio/{{ cap.id }}.mp3"></audio>
+    </section>
+
+    <section class="en">
+      <h2>You said</h2>
+      <p>{{ cap.en_transcript }}</p>
+    </section>
+
+    {% if cap.cards %}
+    <section class="cards-summary">
+      <h2>{{ cap.cards|length }} card{% if cap.cards|length != 1 %}s{% endif %} to learn</h2>
+      <ul>
+        {% for c in cap.cards %}
+        <li><strong>{{ c.get("back","") }}</strong> — {{ c.get("front","") }}
+          {% if c.get("pos") %}<span class="pos">{{ c.get("pos") }}</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    <section class="actions">
+      <a class="btn" href="/cards.apkg">Download new cards</a>
+      <a class="btn ghost" href="/cards.apkg?snapshot=true">Snapshot (all)</a>
+    </section>
+
+  {% elif cap.status == "failed" %}
+    <section class="failed">
+      <h2>Processing failed</h2>
+      <p>{{ cap.error or "unknown error" }}</p>
+      <p>Send <code>/retry {{ cap.id }}</code> in Telegram to retry.</p>
+    </section>
+  {% else %}
+    <section class="pending" data-cap-id="{{ cap.id }}">
+      <h2>Processing…</h2>
+      <p class="status-line">Stage: <em>{{ cap.status }}</em></p>
+      <p class="hint">This page auto-refreshes when ready.</p>
+    </section>
+    <script>
+      // Lightweight polling — refresh until status leaves processing states.
+      setTimeout(() => window.location.reload(), 4000);
+    </script>
+  {% endif %}
+</main>
+
+<div id="popup" class="popup hidden" role="dialog" aria-hidden="true">
+  <div class="popup-word"></div>
+  <div class="popup-gloss"></div>
+  <div class="popup-meta"><span class="popup-lemma"></span> <span class="popup-pos"></span></div>
+</div>
+
+<script src="/static/review.js"></script>
+</body>
+</html>

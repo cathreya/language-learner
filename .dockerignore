@@ -1,0 +1,30 @@
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+
+# Secrets — must be set as Fly secrets, never baked into image
+.env
+.env.*
+!.env.example
+
+# Local data is volume-mounted in production
+data/
+
+# Tooling and editors
+.idea
+.vscode
+.DS_Store
+.context
+
+# Tests (don't run in prod image)
+tests/
+
+# Build/dist
+dist/
+build/
+*.egg-info

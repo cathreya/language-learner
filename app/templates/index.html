@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Captured — Italian</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="index">
+<header class="meta">
+  <span class="ts">Captured</span>
+  <a class="cid" href="/cards.apkg">Download .apkg</a>
+</header>
+<main>
+  {% if due_count and due_count > 0 %}
+  <a class="study-banner" href="/study">
+    <div>
+      <div class="due-count">{{ due_count }} due</div>
+      <div class="label">tap to study</div>
+    </div>
+    <div class="go">→</div>
+  </a>
+  {% endif %}
+  {% if not captures %}
+    <section class="empty">
+      <h2>Nothing captured yet.</h2>
+      <p>Send a voice message to the Telegram bot to get started.</p>
+    </section>
+  {% else %}
+    <ul class="capture-list">
+      {% for c in captures %}
+      <li class="cap-row status-{{ c.status }}">
+        <a href="/r/{{ c.id }}">
+          <div class="cap-it">{{ c.it_text or "—" }}</div>
+          <div class="cap-en">{{ c.en_transcript or "(processing…)" }}</div>
+          <div class="cap-meta">
+            <span class="cap-ts">{{ c.created_at.strftime("%b %d, %H:%M") }}</span>
+            <span class="cap-status">{{ c.status }}</span>
+          </div>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</main>
+</body>
+</html>
