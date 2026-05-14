@@ -28,7 +28,7 @@ fi
 
 PROJECT_ID="${PROJECT_ID:?set PROJECT_ID in .env or env}"
 REGION="${REGION:-us-central1}"
-SERVICE="${SERVICE:-it-practice-bot}"
+SERVICE="${SERVICE:-language-learner}"
 GCS_BUCKET="${GCS_BUCKET:?set GCS_BUCKET in .env}"
 
 echo "==> Project:  $PROJECT_ID"
