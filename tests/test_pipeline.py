@@ -8,10 +8,11 @@ from app.pipeline import (
     _attach_char_offsets,
     _backfill_trailing_punct,
     _drop_empty_cards,
+    _make_sentence_cards,
     _merge_apostrophe_clitics,
+    _split_sentence_units,
     _strip_json_fence,
 )
-
 
 # === _merge_apostrophe_clitics ===
 
@@ -138,6 +139,45 @@ def test_drop_empty_cards_filters():
 def test_drop_empty_cards_handles_missing_keys():
     assert _drop_empty_cards([{}]) == []
     assert _drop_empty_cards([{"front": None, "back": None}]) == []
+
+
+# === sentence splitting ===
+
+def test_split_sentence_units_keeps_final_fragment():
+    text = "I played tennis today. We played really badly. Especially the serve"
+    assert _split_sentence_units(text) == [
+        "I played tennis today.",
+        "We played really badly.",
+        "Especially the serve",
+    ]
+
+
+def test_make_sentence_cards_aligns_multiple_sentences():
+    cards = _make_sentence_cards(
+        "I played tennis today. We played really badly. Especially the serve",
+        "Oggi ho giocato a tennis. Abbiamo giocato davvero male. Soprattutto il servizio.",
+    )
+    assert [c["front"] for c in cards] == [
+        "I played tennis today.",
+        "We played really badly.",
+        "Especially the serve",
+    ]
+    assert [c["back"] for c in cards] == [
+        "Oggi ho giocato a tennis.",
+        "Abbiamo giocato davvero male.",
+        "Soprattutto il servizio.",
+    ]
+    assert all(c["granularity"] == "sentence" for c in cards)
+
+
+def test_make_sentence_cards_falls_back_when_alignment_mismatches():
+    cards = _make_sentence_cards(
+        "I played tennis today. We played badly.",
+        "Oggi ho giocato a tennis e abbiamo giocato male.",
+    )
+    assert len(cards) == 1
+    assert cards[0]["front"] == "I played tennis today. We played badly."
+    assert cards[0]["back"] == "Oggi ho giocato a tennis e abbiamo giocato male."
 
 
 # === _strip_json_fence ===

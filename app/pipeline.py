@@ -17,7 +17,7 @@ from mistralai.client import Mistral
 
 from app import db, srs
 from app.config import settings
-from app.models import Capture, CaptureStatus
+from app.models import CaptureStatus
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +46,10 @@ def mistral() -> Mistral:
 TRANSLATE_SYSTEM_PROMPT = """You are a precise translator and linguistic analyzer for {target_name} language learners.
 
 You receive an English sentence (or short utterance) that the user wants to learn how to say in {target_name}.
+
+If the input contains multiple sentences or sentence fragments, preserve that
+same sentence count and order in target_text. Do not merge them into one
+sentence. Translate fragments as natural fragments when appropriate.
 
 Return ONLY a JSON object with this exact shape:
 {{
@@ -141,6 +145,59 @@ def _merge_apostrophe_clitics(tokens: list[dict]) -> list[dict]:
 def _drop_empty_cards(cards: list[dict]) -> list[dict]:
     """Filter cards missing front/back text — LLMs occasionally emit empties."""
     return [c for c in cards if (c.get("front") or "").strip() and (c.get("back") or "").strip()]
+
+
+def _split_sentence_units(text: str) -> list[str]:
+    """Split casual user text into sentence-like units.
+
+    A final fragment without terminal punctuation still counts as a sentence
+    for study purposes, e.g. "Especially the serve".
+    """
+    text = re.sub(r"\s+", " ", text.strip())
+    if not text:
+        return []
+
+    out: list[str] = []
+    start = 0
+    for match in re.finditer(r"[.!?…]+(?=\s+|$)", text):
+        end = match.end()
+        unit = text[start:end].strip()
+        if unit:
+            out.append(unit)
+        start = end
+        while start < len(text) and text[start].isspace():
+            start += 1
+
+    tail = text[start:].strip()
+    if tail:
+        out.append(tail)
+    return out
+
+
+def _make_sentence_cards(source_text: str, target_text: str) -> list[dict]:
+    """Build sentence-level vocab cards, one per aligned source/target unit."""
+    source_units = _split_sentence_units(source_text)
+    target_units = _split_sentence_units(target_text)
+    if source_units and len(source_units) == len(target_units):
+        pairs = zip(source_units, target_units, strict=True)
+    else:
+        pairs = [((source_text or "").strip(), (target_text or "").strip())]
+
+    cards: list[dict] = []
+    for front, back in pairs:
+        if not front or not back:
+            continue
+        cards.append(
+            {
+                "front": front,
+                "back": back,
+                "lemma": back,
+                "pos": "sentence",
+                "granularity": "sentence",
+                "tags": ["captured", "sentence"],
+            }
+        )
+    return cards
 
 
 def dedupe_cards(
@@ -314,17 +371,9 @@ async def stage_translate(capture_id: str) -> None:
     tokens = _attach_char_offsets(target_text, tokens)
     cards = _drop_empty_cards(cards)
 
-    # Prepend a SENTENCE card (full capture as one vocab item). This produces
-    # forward+backward sentence cards via the same machinery as word vocab.
-    sentence_card = {
-        "front": cap.en_transcript or "",
-        "back": target_text,
-        "lemma": target_text,
-        "pos": "sentence",
-        "granularity": "sentence",
-        "tags": ["captured", "sentence"],
-    }
-    cards = [sentence_card, *cards]
+    # Prepend sentence cards. Multi-sentence captures become one sentence-level
+    # item per aligned sentence, while shadowing remains one full-capture card.
+    cards = [*_make_sentence_cards(cap.en_transcript or "", target_text), *cards]
 
     # Dedupe: drop any vocab card whose (back, pos) already exists in another capture.
     # Different conjugations of the same lemma stay separate (only exact-surface matches drop).
